@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NestFinder | Complete Portal</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary: #6366f1; --dark: #1e293b; --accent: #f43f5e; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background: #f1f5f9; min-height: 100vh; display: flex; flex-direction: column; }
+        header { background: var(--dark); color: white; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        main { flex: 1; padding: 2rem; max-width: 900px; margin: 0 auto; width: 100%; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .card { background: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 1rem; cursor: pointer; transition: 0.3s; }
+        .card:hover { transform: translateY(-5px); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+        input, textarea { padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%; margin-bottom: 1rem; }
+        .btn { padding: 0.8rem 1.5rem; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; width: 100%; margin-bottom: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        #auth-nav { display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1><i class="fa-solid fa-house-chimney"></i> NestFinder</h1>
+    <div id="auth-nav"><button onclick="logout()" class="btn" style="width: auto; background: var(--accent); color: white;">Logout</button></div>
+</header>
+
+<main>
+    <section id="page-login" class="page active">
+        <div class="card" style="max-width: 400px; margin: auto; cursor: default;">
+            <h2 id="auth-title">Login</h2>
+            <input type="text" id="email" placeholder="Gmail Address">
+            <input type="password" id="password" placeholder="Password">
+            <select id="roleSelect" style="width:100%; padding: 0.8rem; margin-bottom: 1rem;">
+                <option value="user">User</option>
+                <option value="seller">Seller</option>
+            </select>
+            <button class="btn btn-primary" id="main-btn" onclick="authenticate()">Sign In</button>
+            <p style="margin-top:1rem; text-align:center; cursor:pointer; color:var(--primary)" onclick="toggleAuth()">Switch to Sign Up</p>
+        </div>
+    </section>
+
+    <section id="page-user" class="page">
+        <input type="text" id="search" placeholder="Search by city..." onkeyup="render()">
+        <div id="user-grid" class="grid"></div>
+    </section>
+
+    <section id="page-details" class="page">
+        <button class="btn" style="width: auto;" onclick="showPage('user')">← Back to Listings</button>
+        <div id="details-content" class="card" style="margin-top: 1rem; cursor: default;"></div>
+        <div class="card" style="cursor: default;">
+            <h3>Inquire about this property</h3>
+            <textarea id="message" placeholder="Write your message here..."></textarea>
+            <button class="btn btn-primary" onclick="sendMessage()">Send Inquiry</button>
+        </div>
+    </section>
+
+    <section id="page-seller" class="page">
+        <div class="card" style="cursor: default;">
+            <h3>Add New Property</h3>
+            <input type="text" id="inTitle" placeholder="Title">
+            <input type="text" id="inAddress" placeholder="Address">
+            <input type="number" id="inPrice" placeholder="Monthly Price">
+            <input type="text" id="inImage" placeholder="Image URL">
+            <button class="btn btn-primary" onclick="addProperty()">Add Listing</button>
+        </div>
+        <div id="seller-grid" class="grid"></div>
+        <div class="card" style="margin-top: 2rem; cursor: default;">
+            <h3>Received Inquiries</h3>
+            <div id="inquiry-list"></div>
+        </div>
+    </section>
+</main>
+
+<script>
+    let isLogin = true;
+    let currentPropertyId = null;
+    let state = {
+        users: JSON.parse(localStorage.getItem('users')) || [],
+        properties: JSON.parse(localStorage.getItem('props')) || [],
+        inquiries: JSON.parse(localStorage.getItem('inquiries')) || []
+    };
+
+    window.onload = () => {
+        const activeUser = JSON.parse(localStorage.getItem('currentUser'));
+        if (activeUser) {
+            document.getElementById('auth-nav').style.display = 'block';
+            showPage(activeUser.role);
+        }
+    };
+
+    function toggleAuth() {
+        isLogin = !isLogin;
+        document.getElementById('auth-title').innerText = isLogin ? "Login" : "Sign Up";
+        document.getElementById('main-btn').innerText = isLogin ? "Sign In" : "Register";
+    }
+
+    function authenticate() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const role = document.getElementById('roleSelect').value;
+
+        if (isLogin) {
+            const user = state.users.find(u => u.email === email && u.password === password);
+            if (user) {
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                document.getElementById('auth-nav').style.display = 'block';
+                showPage(user.role);
+            } else alert("Invalid credentials!");
+        } else {
+            state.users.push({ email, password, role });
+            localStorage.setItem('users', JSON.stringify(state.users));
+            alert("Registered successfully! Please login.");
+            toggleAuth();
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem('currentUser');
+        document.getElementById('auth-nav').style.display = 'none';
+        showPage('login');
+    }
+
+    function showPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(`page-${pageId}`).classList.add('active');
+        render();
+    }
+
+    function render() {
+        const term = document.getElementById('search')?.value.toLowerCase() || '';
+        const filtered = state.properties.filter(p => p.address.toLowerCase().includes(term));
+        
+        document.getElementById('user-grid').innerHTML = filtered.map(p => `
+            <div class="card" onclick="viewDetails(${p.id})">
+                <img src="${p.image}" style="width: 100%; height: 150px; object-fit: cover; border-radius: 6px;">
+                <h3>${p.title}</h3>
+                <p>${p.address}</p>
+                <p><strong>$${p.price}/mo</strong></p>
+            </div>
+        `).join('');
+
+        document.getElementById('seller-grid').innerHTML = state.properties.map(p => `
+            <div class="card" style="cursor:default">
+                <h3>${p.title}</h3>
+                <p>${p.address}</p>
+                <button class="btn" style="background:var(--accent); color:white;" onclick="deleteProperty(${p.id})">Delete</button>
+            </div>
+        `).join('');
+
+        document.getElementById('inquiry-list').innerHTML = state.inquiries.map(i => `
+            <div style="border-bottom: 1px solid #ccc; padding: 10px 0;">
+                <p><strong>From:</strong> ${i.sender}</p>
+                <p><strong>Message:</strong> ${i.text}</p>
+                <small>${i.timestamp}</small>
+            </div>
+        `).join('');
+    }
+
+    function viewDetails(id) {
+        currentPropertyId = id;
+        const p = state.properties.find(p => p.id === id);
+        document.getElementById('details-content').innerHTML = `
+            <img src="${p.image}" style="width: 100%; max-height: 300px; object-fit: cover; border-radius: 6px;">
+            <h2>${p.title}</h2>
+            <p><strong>Address:</strong> ${p.address}</p>
+            <p><strong>Price:</strong> $${p.price}/mo</p>
+        `;
+        showPage('details');
+    }
+
+    function sendMessage() {
+        const msg = document.getElementById('message').value;
+        const sender = JSON.parse(localStorage.getItem('currentUser')).email;
+        state.inquiries.push({ propertyId: currentPropertyId, sender, text: msg, timestamp: new Date().toLocaleString() });
+        localStorage.setItem('inquiries', JSON.stringify(state.inquiries));
+        alert("Inquiry sent!");
+        document.getElementById('message').value = '';
+    }
+
+    function addProperty() {
+        const p = { 
+            id: Date.now(), 
+            title: document.getElementById('inTitle').value, 
+            address: document.getElementById('inAddress').value, 
+            price: document.getElementById('inPrice').value,
+            image: document.getElementById('inImage').value 
+        };
+        state.properties.push(p);
+        localStorage.setItem('props', JSON.stringify(state.properties));
+        render();
+    }
+
+    function deleteProperty(id) {
+        state.properties = state.properties.filter(p => p.id !== id);
+        localStorage.setItem('props', JSON.stringify(state.properties));
+        render();
+    }
+</script>
+</body>
+</html>
