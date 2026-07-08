@@ -181,7 +181,6 @@
         alert("Inquiry sent!");
         document.getElementById('message').value = '';
     }
-
     function addProperty() {
         const p = { 
             id: Date.now(), 
